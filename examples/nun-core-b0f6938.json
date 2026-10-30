@@ -1,0 +1,31 @@
+{
+  "source": "NuN (bis3946)",
+  "snapshot": "github.com/bis3946/core@b0f6938",
+  "sourceUri": "https://github.com/bis3946/core/tree/b0f6938",
+  "claims": [
+    {
+      "statement": "quantum_priority_hash.txt (e5809e31629ecaee805a6aef544f3e9974a51c20e90116f666f81935c2b7d92c) is the SHA-256 of nun_quantum_proof.lean at b0f6938",
+      "reference": "c1_hash_parity",
+      "assertedStatus": "VERIFIED",
+      "test": "sha256sum nun_quantum_proof.lean and compare with quantum_priority_hash.txt"
+    },
+    {
+      "statement": "The repository contains lean-toolchain (leanprover/lean4:v4.12.0) and lakefile.lean enabling reproducible formal verification",
+      "reference": "c2_toolchain_present",
+      "assertedStatus": "VERIFIED",
+      "test": "lake build with the pinned toolchain exits 0"
+    },
+    {
+      "statement": "nun_quantum_proof.lean has no trivial True conclusions and proves VFE surplus collapse to zero under the projection operator P_v",
+      "reference": "c3_non_trivial_proof",
+      "assertedStatus": "VERIFIED",
+      "test": "lake build, then #print axioms for each theorem"
+    },
+    {
+      "statement": "Any non-zero speculative entropy (s2 > 0) strictly produces positive VFE surplus under positive room-temperature thermal parameters (kB > 0, tempK > 0)",
+      "reference": "c4_positive_vfe_dissipation",
+      "assertedStatus": "VERIFIED",
+      "test": "lake build NunQuantumProof"
+    }
+  ]
+}

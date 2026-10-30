@@ -65,3 +65,13 @@ test("over MCP: the tool is listed and imports the NuN snapshot", async () => {
   assert.equal(bad.error, "EXTERNAL_IMPORT_FAILED");
   await client.close();
 });
+
+test("NuN b0f6938 snapshot: every claim names a test, so all arrive capped at HYPOTHESIS", () => {
+  const snap = JSON.parse(readFileSync(fileURLToPath(new URL("../examples/nun-core-b0f6938.json", import.meta.url)), "utf8"));
+  const d = new Civ1Domain();
+  const m = d.createMission("Review NuN b0f6938");
+  const r = d.importExternalSource(m.id, snap);
+  assert.deepEqual(r.imported.map((i) => i.status), ["HYPOTHESIS", "HYPOTHESIS", "HYPOTHESIS", "HYPOTHESIS"]);
+  assert.ok(r.imported.every((i) => i.downgraded && i.assertedStatus === "VERIFIED"));
+  assert.ok(r.objections.length >= 4, "each VERIFIED assertion is objected to until checked here");
+});
