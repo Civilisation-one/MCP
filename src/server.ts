@@ -11,7 +11,8 @@ export function createCiv1McpServer(domain = new Civ1Domain()) {
 
   server.tool("civ1_system_status", "Return capabilities and limitations; no deployment or production-readiness claim.", {}, async () =>
     result({ name: "Civilisation.One MCP", version: "0.1.0", status: "PROTOTYPE", transport: "stdio",
-      persistence: "in-memory", capabilities: ["missions", "evidence-records", "objection-ledger", "gate-status-records", "audit-events"],
+      persistence: "in-memory", capabilities: ["missions", "evidence-records", "objection-ledger", "gate-status-records", "audit-events",
+        "external-source-import"],
       limitations: ["no-authentication", "no-durable-storage", "no-source-verification", "no-external-actions"] }));
 
   server.tool("civ1_create_mission", "Create a local in-memory mission. This does not authorize external actions.",
@@ -43,6 +44,22 @@ export function createCiv1McpServer(domain = new Civ1Domain()) {
     async ({ missionId: id, gate, status, rationale }) => {
       try { return result(domain.setGateStatus(id, gate, status, rationale)); }
       catch (error) { return result({ error: "GATE_RECORD_FAILED", message: error instanceof Error ? error.message : String(error) }); }
+    });
+
+  server.tool("civ1_import_external_source",
+    "One-way import of an outside source's claims into a mission. Statuses are capped at HYPOTHESIS (SPECULATION " +
+    "without a named test); the source's own status is recorded, not applied; authority, verification and " +
+    "royalty language is recorded as objections. Nothing is fetched from or sent to the source.",
+    { missionId, source: z.string().trim().min(1).max(200), snapshot: z.string().trim().min(1).max(200),
+      sourceUri: z.string().url().max(2000).optional(),
+      claims: z.array(z.object({
+        statement: shortText, reference: z.string().trim().min(1).max(500),
+        sourceUri: z.string().url().max(2000).optional(), assertedStatus: z.string().trim().max(100).optional(),
+        test: z.string().trim().max(2000).optional(),
+      })).min(1).max(100) },
+    async ({ missionId: id, ...input }) => {
+      try { return result(domain.importExternalSource(id, input)); }
+      catch (error) { return result({ error: "EXTERNAL_IMPORT_FAILED", message: error instanceof Error ? error.message : String(error) }); }
     });
 
   server.tool("civ1_close_mission", "Close a mission to further record additions. Internal state change only.",
