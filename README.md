@@ -11,6 +11,7 @@ A minimal, local-first Model Context Protocol (MCP) server for Civilisation.One 
 - `civ1_record_evidence` — attach a provenance-labelled evidence record.
 - `civ1_record_objection` — preserve criticism and unresolved disagreement.
 - `civ1_set_gate_status` — record a declared gate result; it does not prove the gate passed.
+- `civ1_import_external_source` — one-way import of an outside source's claims (see below).
 - `civ1_close_mission` — close a mission to further record additions.
 
 All data is in memory and disappears when the process exits. No external API calls, repository writes, memory commits, publishing, or consequential actions are performed.
@@ -22,6 +23,7 @@ Node.js 20+ and npm.
 npm install
 npm run build
 npm test
+npm run smoke   # starts dist/index.js over stdio, as a client would, and calls the tools
 npm start
 ```
 
@@ -40,6 +42,19 @@ Use an absolute path appropriate to your machine:
   }
 }
 ```
+
+## Importing outside sources
+
+`civ1_import_external_source` records another project's claims in a mission without trusting them:
+
+- Nothing is fetched from the source and nothing is sent back. The caller supplies the claims and a snapshot id (for example a commit).
+- Status is capped: **HYPOTHESIS** if the claim names the test that would settle it, otherwise **SPECULATION**. The source's own status ("PROVEN", "VERIFIED") is kept as `assertedStatus` and never applied.
+- Language that asserts authority, verification, priority or a revenue/royalty entitlement (`[ROOT]`, "authorised", "50/50 split", "proven") is recorded as an unresolved objection on that claim. Text can't grant any of these.
+- Raising a claim above HYPOTHESIS needs evidence checked inside Civilisation.One, recorded separately.
+
+[`examples/nun-core-96a7dcf.json`](examples/nun-core-96a7dcf.json) is a snapshot of the NuN claims in `github.com/bis3946/core` at commit `96a7dcf`, ready to pass as the tool's arguments (with a `missionId`). A review of that repository on 30 Oct 2026 found that `quantum_priority_hash.txt` does match `nun_quantum_proof.lean`, that the Lean theorem's conclusion is `True` (so it holds whatever the assumptions), that room temperature and the VFE bound are assumed rather than derived, and that the repository has no Lean toolchain or build configuration. Record those as evidence or objections against the imported claims.
+
+There is no live connection to NuN or any other outside system. Before one is considered, this server needs the authentication, per-tool authorisation and durable audit listed under Security limitations.
 
 ## Design invariants
 1. Model output is not verified evidence.
