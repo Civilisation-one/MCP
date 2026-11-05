@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { Civ1Domain, EVIDENCE_STATUSES, GATE_STATUSES } from "./domain.js";
+import { validateNuNTemporalState } from "./bridge/state-validator.js";
 
 const missionId = z.string().regex(/^CIV1-M-\d{5}$/, "Expected mission ID like CIV1-M-00001");
 const shortText = z.string().trim().min(1).max(4000);
@@ -8,6 +9,12 @@ const result = (data: unknown) => ({ content: [{ type: "text" as const, text: JS
 
 export function createCiv1McpServer(domain = new Civ1Domain()) {
   const server = new McpServer({ name: "civilisation-one-mcp", version: "0.1.0" });
+
+  server.tool("civ1_bridge_validate_temporal_state", "Validate a proposed NuN temporal-state envelope structurally. This does not authenticate the sender or verify the model equations.",
+    { state: z.unknown() }, async ({ state }) => {
+      try { return result({ valid: true, trust: "UNVERIFIED", state: validateNuNTemporalState(state) }); }
+      catch (error) { return result({ valid: false, trust: "UNVERIFIED", error: error instanceof Error ? error.message : String(error) }); }
+    });
 
   server.tool("civ1_system_status", "Return capabilities and limitations; no deployment or production-readiness claim.", {}, async () =>
     result({ name: "Civilisation.One MCP", version: "0.1.0", status: "PROTOTYPE", transport: "stdio",
