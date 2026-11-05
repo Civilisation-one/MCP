@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { randomUUID } from "node:crypto";
+import { generateKeyPairSync, randomUUID } from "node:crypto";
 import { signBridgeMessage } from "../src/bridge/protocol.js";
 import {
   decodeLiGiPacket,
@@ -12,7 +12,9 @@ import {
 } from "../src/transport/ligi-adapter.js";
 
 const sessionId = "0123456789abcdef";
-function message() {
+const keys = generateKeyPairSync("ed25519");
+
+function message(payload: unknown = { state: [0.2, 0.8] }) {
   return signBridgeMessage({
     protocol: "NUN-VIREAX",
     version: "1.0.0",
@@ -22,12 +24,9 @@ function message() {
     sender: { nodeId: "nun-optical-01", system: "NuN", version: "0.1.0", keyId: "nun-key-01" },
     timestamp: new Date().toISOString(),
     messageType: "STATE_PROPOSAL",
-    payload: { state: [0.2, 0.8] },
-  }, (awaitlessKey()).privateKey);
+    payload,
+  }, keys.privateKey);
 }
-import { generateKeyPairSync } from "node:crypto";
-const keys = generateKeyPairSync("ed25519");
-function awaitlessKey() { return keys; }
 
 test("packet preserves the original signed envelope and session binding", () => {
   const original = message();
@@ -90,5 +89,22 @@ test("receive returns a decoded message but does not claim it is authenticated",
 });
 
 test("oversized packets are rejected", () => {
-  assert.throws(() => encodeLiGiPacket(message(), sessionId, 1024), /LIGI_PACKET_TOO_LARGE/);
+  assert.throws(() => encodeLiGiPacket(message({ data: "x".repeat(2048) }), sessionId, 1024), /LIGI_PACKET_TOO_LARGE/);
+});
+
+test("transport operations time out and abort the adapter operation", async () => {
+  let aborted = false;
+  const port: LiGiTransportPort = {
+    async transmit(_packet, signal) {
+      return new Promise((_, reject) => {
+        signal.addEventListener("abort", () => {
+          aborted = true;
+          reject(new Error("aborted"));
+        }, { once: true });
+      });
+    },
+    async receive() { throw new Error("unused"); },
+  };
+  await assert.rejects(() => sendViaLiGi(port, message(), sessionId, { timeoutMs: 5 }), /LIGI_TRANSPORT_TIMEOUT/);
+  assert.equal(aborted, true);
 });
