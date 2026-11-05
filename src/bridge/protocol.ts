@@ -37,7 +37,7 @@ export type UnsignedBridgeMessage<T = unknown> = Omit<BridgeMessage<T>, "signatu
 };
 
 function stable(value: unknown): string {
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
   if (Array.isArray(value)) return "[" + value.map(stable).join(",") + "]";
   const object = value as Record<string, unknown>;
   return "{" + Object.keys(object).sort().map((key) => JSON.stringify(key) + ":" + stable(object[key])).join(",") + "}";
