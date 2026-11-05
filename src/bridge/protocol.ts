@@ -29,12 +29,26 @@ export const bridgeMessageSchema = z.object({
     previousHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   }).strict(),
   signature: z.string().min(1).max(2048),
-}).strict();
+}).strict().superRefine((message, ctx) => {
+  if (!Object.prototype.hasOwnProperty.call(message, "payload")) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["payload"], message: "payload is required" });
+  }
+});
 
-export type BridgeMessage<T = unknown> = z.infer<typeof bridgeMessageSchema> & { payload: T };
-export type UnsignedBridgeMessage<T = unknown> = Omit<BridgeMessage<T>, "signature" | "provenance"> & {
+export interface BridgeMessage<T = unknown> {
+  protocol: typeof BRIDGE_PROTOCOL;
+  version: typeof BRIDGE_VERSION;
+  messageId: string;
+  correlationId: string;
+  sequence: number;
+  sender: { nodeId: string; system: BridgeSystem; version: string; keyId: string };
+  timestamp: string;
+  messageType: BridgeMessageType;
+  payload: T;
   provenance: { contentHash: string; previousHash?: string };
-};
+  signature: string;
+}
+export type UnsignedBridgeMessage<T = unknown> = Omit<BridgeMessage<T>, "signature">;
 
 function stable(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
@@ -45,7 +59,7 @@ function stable(value: unknown): string {
 export function canonicalJson(value: unknown): string { return stable(value); }
 export function sha256(value: string): string { return createHash("sha256").update(value, "utf8").digest("hex"); }
 
-function signingBody(message: Omit<BridgeMessage, "signature">): string {
+function signingBody(message: object): string {
   return canonicalJson(message);
 }
 
@@ -58,15 +72,16 @@ export function signBridgeMessage<T>(
   const { previousHash, ...base } = input;
   const unsigned = {
     ...base,
+    payload: input.payload,
     provenance: { contentHash, ...(previousHash ? { previousHash } : {}) },
   } as Omit<BridgeMessage<T>, "signature">;
-  const signature = sign(null, Buffer.from(signingBody(unsigned as Omit<BridgeMessage, "signature">)), privateKey).toString("base64");
+  const signature = sign(null, Buffer.from(signingBody(unsigned)), privateKey).toString("base64");
   return { ...unsigned, signature };
 }
 
 /** Verify schema, payload hash and Ed25519 signature against a previously trusted public key. */
 export function verifyBridgeMessage(input: unknown, publicKey: KeyLike): BridgeMessage {
-  const parsed = bridgeMessageSchema.parse(input);
+  const parsed = bridgeMessageSchema.parse(input) as BridgeMessage;
   if (sha256(canonicalJson(parsed.payload)) !== parsed.provenance.contentHash) {
     throw new Error("BRIDGE_CONTENT_HASH_MISMATCH");
   }
