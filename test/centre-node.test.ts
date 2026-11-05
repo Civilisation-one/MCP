@@ -10,14 +10,14 @@ import {
   type StageContext,
 } from "../src/centre-node/control-plane.js";
 
-function makeMessage(privateKey: KeyObject, sequence = 1) {
+function makeMessage(privateKey: KeyObject, sequence = 1, nodeId = "nun-compute-01") {
   return signBridgeMessage({
     protocol: "NUN-VIREAX",
     version: "1.0.0",
     messageId: randomUUID(),
     correlationId: randomUUID(),
     sequence,
-    sender: { nodeId: "nun-compute-01", system: "NuN", version: "0.1.0", keyId: "nun-key-01" },
+    sender: { nodeId, system: "NuN", version: "0.1.0", keyId: "nun-key-01" },
     timestamp: new Date().toISOString(),
     messageType: "STATE_PROPOSAL",
     payload: { logicalStep: sequence, state: [0.25, 0.75] },
@@ -70,8 +70,7 @@ test("Centre Node authenticates NuN and runs the four stages in order", async ()
 
 test("unknown identity is rejected before pipeline execution", async () => {
   const { keys, node, order } = setup();
-  const other = generateKeyPairSync("ed25519");
-  const message = makeMessage(other.privateKey);
+  const message = makeMessage(keys.privateKey, 1, "nun-unknown-99");
   await assert.rejects(() => node.ingest(message), /CENTRE_IDENTITY_NOT_TRUSTED/);
   assert.deepEqual(order, []);
 });
