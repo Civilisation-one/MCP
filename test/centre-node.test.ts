@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { generateKeyPairSync, randomUUID } from "node:crypto";
+import { generateKeyPairSync, randomUUID, type KeyObject } from "node:crypto";
 import { signBridgeMessage } from "../src/bridge/protocol.js";
 import {
   MemoryAuditLedger,
@@ -10,7 +10,7 @@ import {
   type StageContext,
 } from "../src/centre-node/control-plane.js";
 
-function makeMessage(privateKey: ReturnType<typeof generateKeyPairSync>["privateKey"], sequence = 1) {
+function makeMessage(privateKey: KeyObject, sequence = 1) {
   return signBridgeMessage({
     protocol: "NUN-VIREAX",
     version: "1.0.0",
