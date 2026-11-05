@@ -6,6 +6,14 @@ import {
   type BridgeMessage,
 } from "../bridge/protocol.js";
 
+function deepFreeze<T>(value: T): T {
+  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const nested of Object.values(value as Record<string, unknown>)) deepFreeze(nested);
+  }
+  return value;
+}
+
 export interface TrustedNode {
   system: "NuN" | "VIREAX";
   nodeId: string;
@@ -136,7 +144,7 @@ export class VireaxCentreNode {
       throw new Error("CENTRE_IDENTITY_NOT_TRUSTED");
     }
 
-    const message = verifyBridgeMessage(envelope, identity.publicKey);
+    const message = deepFreeze(verifyBridgeMessage(envelope, identity.publicKey));
     // Scope sequence state to system + node + key, not node ID alone.
     this.sequences.accept(`${sender.system}:${sender.nodeId}:${sender.keyId}`, message.sequence);
     this.audit.append("INGRESS_AUTHENTICATED", message.messageId, {
@@ -149,7 +157,7 @@ export class VireaxCentreNode {
     });
 
     const stages: Record<string, StageResult> = {};
-    const context = (): StageContext => ({ message, prior: Object.freeze({ ...stages }) });
+    const context = (): StageContext => ({ message, prior: deepFreeze(structuredClone(stages)) });
     const ordered = [
       ["MIRROR", this.pipeline.mirror],
       ["CRITIC", this.pipeline.critic],
