@@ -85,3 +85,8 @@ Gate statuses: `PASS`, `FAIL`, `BLOCKED`, `INCONCLUSIVE`.
 6. MCP client integration tests, threat model and release workflow.
 
 No license has been selected. All rights are reserved unless the repository owner adds a license.
+
+
+## CV1-SEC-001 security integration
+
+The cross-repository capability contract and MCP hardening requirements are documented in [CV1-SEC-001](docs/CV1-SEC-001.md). This is a design/integration milestone, not a claim that this prototype is now authenticated or production-secure. The current stdio server remains unauthenticated and in-memory; do not expose it as a network service. The future T3MP3ST adapter must verify exact scope and approval independently before any tool execution.
