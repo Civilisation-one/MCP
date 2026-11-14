@@ -117,7 +117,7 @@ export function createCiv1McpServer(domain = new Civ1Domain(), options: Civ1McpS
 
   registerTool("civ1_open_draft_pr",
     "Open a draft pull request in Civilisation-one/MCP only. Requires authenticated transport identity and independent host authorization. Never merges, publishes, deploys, accepts secrets, or grants authority.",
-    { title: z.string().trim().min(1).max(200), body: z.string().max(10000),
+    { title: z.string().trim().min(1).max(200).regex(/^[A-Za-z0-9][A-Za-z0-9 .:_/-]*$/),
       head: z.string().regex(/^[A-Za-z0-9._/-]{1,200}$/), repository: z.literal("Civilisation-one/MCP").default("Civilisation-one/MCP"),
       base: z.literal("main").default("main") },
     async ({ title, head, repository, base }, extra) => {
