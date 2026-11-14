@@ -27,7 +27,9 @@ export function createCiv1McpServer(domain = new Civ1Domain(), options: Civ1McpS
       try { actor = options.resolveTransportActor?.(extra) ?? null; }
       catch { actor = null; }
       const who = actor?.authenticated === true && actor.subject.trim()
-        ? actor.subject : "stdio:unauthenticated";
+        ? actor.subject.slice(0, 256) : "stdio:unauthenticated";
+      // Fsynced intent record before any handler mutation or external action.
+      audit.append(who, name, args, "PENDING");
       try {
         const response = await handler(args, extra);
         let resultClass = "success";
