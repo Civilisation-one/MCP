@@ -9,7 +9,7 @@ const missionId = z.string().regex(/^CIV1-M-\d{5}$/, "Expected mission ID like C
 const shortText = z.string().trim().min(1).max(4000);
 const result = (data: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] });
 const noSecretLike = (value: string) =>
-  !/(gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{15,}|-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----|\\bBearer\\s+|\\b(password|token|secret)\\s*[:=])/i.test(value);
+  !/(gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{15,}|-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----|\bBearer\\s+|\b(password|token|secret)\\s*[:=])/i.test(value);
 
 export interface Civ1McpServerOptions {
   audit?: AppendOnlyAudit;
