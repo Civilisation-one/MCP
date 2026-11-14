@@ -1,0 +1,3 @@
+[submodule "civ-intelligence-layer"]
+	path = civ-intelligence-layer
+	url = https://github.com/Civilisation-one/civ-intelligence-layer.git
