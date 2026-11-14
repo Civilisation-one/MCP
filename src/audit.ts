@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { appendFileSync, closeSync, constants, mkdirSync, openSync } from "node:fs";
+import { chmodSync, closeSync, constants, fsyncSync, mkdirSync, openSync, writeSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 export interface TransportActor { subject: string; authenticated: true; }
