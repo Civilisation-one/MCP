@@ -16,9 +16,9 @@ test("tool calls append actor, tool, argument hash and result class without raw 
     const client = new Client({ name: "audit-test", version: "0" });
     const [a,b] = InMemoryTransport.createLinkedPair();
     await Promise.all([server.connect(a), client.connect(b)]);
-    const mission = JSON.parse((await client.callTool({ name: "civ1_create_mission", arguments: { goal: "audit test" } })).content[0].text);
+    const mission = JSON.parse(((await client.callTool({ name: "civ1_create_mission", arguments: { goal: "audit test" } })).content[0] as any).text);
     await client.callTool({ name: "civ1_record_objection", arguments: {
-      missionId: mission.id, statement: "Persist this objection", raisedBy: "test-agent"
+      missionId: mission.id, statement: "Persist this objection", raisedBy: "test-agent", actorId: "model-minted-admin"
     }});
     await client.close();
     const lines = readFileSync(join(dir, "audit.jsonl"), "utf8").trim().split("\n").map((x) => JSON.parse(x));
@@ -44,7 +44,7 @@ test("draft PR tool is present but fails closed without authenticated transport"
     const response = await client.callTool({ name: "civ1_open_draft_pr", arguments: {
       title: "test", body: "test", head: "feature/test", repository: "Civilisation-one/MCP", base: "main"
     }});
-    const data = JSON.parse(response.content[0].text);
+    const data = JSON.parse((response.content[0] as any).text);
     assert.equal(data.error, "AUTHENTICATED_TRANSPORT_REQUIRED");
     await client.close();
   } finally { rmSync(dir, { recursive: true, force: true }); }
