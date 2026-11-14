@@ -14,8 +14,8 @@ export interface AuditRecord {
 function stable(value: unknown): string {
   if (Array.isArray(value)) return "[" + value.map(stable).join(",") + "]";
   if (value && typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>).sort(([a],[b]) => a.localeCompare(b));
-    return "{" + entries.map(([k,v]) => JSON.stringify(k) + ":" + stable(v)).join(",") + "}";
+    const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b));
+    return "{" + entries.map(([k, v]) => JSON.stringify(k) + ":" + stable(v)).join(",") + "}";
   }
   return JSON.stringify(value) ?? "null";
 }
@@ -33,15 +33,21 @@ export class AppendOnlyAudit {
   }
   assertWritable(): void {
     const fd = openSync(this.path, constants.O_CREAT | constants.O_APPEND | constants.O_WRONLY, 0o600);
-    closeSync(fd);
+    try { chmodSync(this.path, 0o600); } finally { closeSync(fd); }
   }
   append(who: string, tool: string, args: unknown, resultClass: string): AuditRecord {
-    this.assertWritable();
     const record: AuditRecord = {
       at: new Date().toISOString(), sequence: ++this.sequence, who, tool,
       args_hash: hashToolArgs(args), result_class: resultClass,
     };
-    appendFileSync(this.path, JSON.stringify(record) + "\n", { encoding: "utf8", mode: 0o600 });
+    const fd = openSync(this.path, constants.O_CREAT | constants.O_APPEND | constants.O_WRONLY, 0o600);
+    try {
+      chmodSync(this.path, 0o600);
+      const data = Buffer.from(JSON.stringify(record) + "\n", "utf8");
+      let offset = 0;
+      while (offset < data.length) offset += writeSync(fd, data, offset, data.length - offset);
+      fsyncSync(fd);
+    } finally { closeSync(fd); }
     return record;
   }
 }
