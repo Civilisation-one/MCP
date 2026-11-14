@@ -8,6 +8,8 @@ import type { DraftPrAuthorizer, DraftPrExecutor, DraftPrRequest } from "./draft
 const missionId = z.string().regex(/^CIV1-M-\d{5}$/, "Expected mission ID like CIV1-M-00001");
 const shortText = z.string().trim().min(1).max(4000);
 const result = (data: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] });
+const noSecretLike = (value: string) =>
+  !/(gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{15,}|-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----|\\bBearer\\s+|\\b(password|token|secret)\\s*[:=])/i.test(value);
 
 export interface Civ1McpServerOptions {
   audit?: AppendOnlyAudit;
@@ -119,8 +121,8 @@ export function createCiv1McpServer(domain = new Civ1Domain(), options: Civ1McpS
 
   registerTool("civ1_open_draft_pr",
     "Open a draft pull request in Civilisation-one/MCP only. Requires authenticated transport identity and independent host authorization. Never merges, publishes, deploys, accepts secrets, or grants authority.",
-    { title: z.string().trim().min(1).max(200).regex(/^[A-Za-z0-9][A-Za-z0-9 .:_/-]*$/),
-      head: z.string().regex(/^[A-Za-z0-9._/-]{1,200}$/), repository: z.literal("Civilisation-one/MCP").default("Civilisation-one/MCP"),
+    { title: z.string().trim().min(1).max(200).regex(/^[A-Za-z0-9][A-Za-z0-9 .:_/-]*$/).refine(noSecretLike),
+      head: z.string().regex(/^[A-Za-z0-9._/-]{1,200}$/).refine(noSecretLike), repository: z.literal("Civilisation-one/MCP").default("Civilisation-one/MCP"),
       base: z.literal("main").default("main") },
     async ({ title, head, repository, base }, extra) => {
       let actor: TransportActor | null = null;
