@@ -115,5 +115,26 @@ export function createCiv1McpServer(domain = new Civ1Domain(), options: Civ1McpS
       catch (error) { return result({ error: "MISSION_CLOSE_FAILED", message: error instanceof Error ? error.message : String(error) }); }
     });
 
+  registerTool("civ1_open_draft_pr",
+    "Open a draft pull request in Civilisation-one/MCP only. Requires authenticated transport identity and independent host authorization. Never merges, publishes, deploys, accepts secrets, or grants authority.",
+    { title: z.string().trim().min(1).max(200), body: z.string().max(10000),
+      head: z.string().regex(/^[A-Za-z0-9._/-]{1,200}$/), repository: z.literal("Civilisation-one/MCP").default("Civilisation-one/MCP"),
+      base: z.literal("main").default("main") },
+    async ({ title, body, head, repository, base }, extra) => {
+      let actor: TransportActor | null = null;
+      try { actor = options.resolveTransportActor?.(extra) ?? null; } catch { actor = null; }
+      if (!actor || actor.authenticated !== true || !actor.subject.trim())
+        return result({ error: "AUTHENTICATED_TRANSPORT_REQUIRED", state: "DENIED" });
+      const request: DraftPrRequest = { repository, title, body, head, base };
+      if (!options.authorizeDraftPr || !options.executeDraftPr)
+        return result({ error: "DRAFT_PR_CAPABILITY_NOT_CONFIGURED", state: "DENIED" });
+      if (!await options.authorizeDraftPr(actor, request))
+        return result({ error: "DRAFT_PR_AUTHORIZATION_DENIED", state: "DENIED" });
+      const receipt = await options.executeDraftPr(request, actor);
+      if (receipt.state !== "open" || receipt.draft !== true || receipt.merged !== false)
+        return result({ error: "DRAFT_PR_RECEIPT_INVALID", state: "FAILED" });
+      return result(receipt);
+    });
+
   return server;
 }
