@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const client = new Client({ name: "civ1-smoke", version: "0" });
-await client.connect(new StdioClientTransport({ command: process.execPath, args: [`${root}dist/index.js`] }));
+await client.connect(new StdioClientTransport({ command: process.execPath, args: [`${root}dist/src/index.js`] }));
 const tools = (await client.listTools()).tools.map((t) => t.name);
 const call = async (name, args) => JSON.parse((await client.callTool({ name, arguments: args })).content[0].text);
 const mission = await call("civ1_create_mission", { goal: "smoke test" });
