@@ -120,12 +120,12 @@ export function createCiv1McpServer(domain = new Civ1Domain(), options: Civ1McpS
     { title: z.string().trim().min(1).max(200), body: z.string().max(10000),
       head: z.string().regex(/^[A-Za-z0-9._/-]{1,200}$/), repository: z.literal("Civilisation-one/MCP").default("Civilisation-one/MCP"),
       base: z.literal("main").default("main") },
-    async ({ title, body, head, repository, base }, extra) => {
+    async ({ title, head, repository, base }, extra) => {
       let actor: TransportActor | null = null;
       try { actor = options.resolveTransportActor?.(extra) ?? null; } catch { actor = null; }
       if (!actor || actor.authenticated !== true || !actor.subject.trim())
         return result({ error: "AUTHENTICATED_TRANSPORT_REQUIRED", state: "DENIED" });
-      const request: DraftPrRequest = { repository, title, body, head, base };
+      const request: DraftPrRequest = { repository, title, body: "MCP draft PR opened under host authorization; human merge required.", head, base };
       if (!options.authorizeDraftPr || !options.executeDraftPr)
         return result({ error: "DRAFT_PR_CAPABILITY_NOT_CONFIGURED", state: "DENIED" });
       if (!await options.authorizeDraftPr(actor, request))
