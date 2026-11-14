@@ -26,6 +26,14 @@ test("closed mission rejects further mutations", () => {
   const mission = domain.createMission("Close-state test");
   domain.closeMission(mission.id);
   assert.throws(() => domain.recordObjection(mission.id, "Late objection", "tester"), /Mission is closed/);
+  assert.throws(() => domain.recordEvidence(mission.id, { reference: "LATE", description: "late", status: "UNKNOWN" }), /Mission is closed/);
+  assert.throws(() => domain.setGateStatus(mission.id, "late", "PASS", "late"), /Mission is closed/);
+  assert.throws(() => domain.importExternalSource(mission.id, {
+    source: "outside", snapshot: "abc", claims: [{ statement: "late", reference: "LATE", test: "check" }]
+  }), /Mission is closed/);
+  const closed = domain.getMission(mission.id)!;
+  assert.equal(closed.status, "CLOSED");
+  assert.equal(closed.audit.at(-1)?.type, "MISSION_CLOSED");
 });
 
 test("unknown mission is not silently created", () => {
