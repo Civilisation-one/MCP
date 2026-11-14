@@ -41,6 +41,8 @@ test("draft PR tool is present but fails closed without authenticated transport"
     await Promise.all([server.connect(a), client.connect(b)]);
     const names = (await client.listTools()).tools.map((x) => x.name);
     assert.ok(names.includes("civ1_open_draft_pr"));
+    const draftTool = (await client.listTools()).tools.find((x) => x.name === "civ1_open_draft_pr")!;
+    assert.deepEqual(Object.keys((draftTool.inputSchema as any).properties).sort(), ["base", "head", "repository", "title"]);
     const response = await client.callTool({ name: "civ1_open_draft_pr", arguments: {
       title: "test", body: "test", head: "feature/test", repository: "Civilisation-one/MCP", base: "main"
     }});
