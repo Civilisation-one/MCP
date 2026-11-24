@@ -62,9 +62,10 @@ export function createCiv1McpServer(domain = new Civ1Domain(), options: Civ1McpS
 
   registerTool("civ1_system_status", "Return capabilities and limitations; no deployment or production-readiness claim.", {}, async () =>
     result({ name: "Civilisation.One MCP", version: "0.1.0", status: "PROTOTYPE", transport: "stdio",
-      persistence: "in-memory", capabilities: ["missions", "evidence-records", "objection-ledger", "gate-status-records", "audit-events",
-        "external-source-import"],
-      limitations: ["no-authentication", "no-durable-storage", "no-source-verification", "no-external-actions"] }));
+      persistence: "in-memory-missions, local-jsonl-audit",
+      capabilities: ["missions", "evidence-records", "objection-ledger", "gate-status-records", "audit-events",
+        "external-source-import", "local-jsonl-audit", "bridge-temporal-state-validation", "fail-closed-draft-pr"],
+      limitations: ["no-authentication", "audit-not-tamper-evident-or-multi-process-safe", "no-source-verification", "no-external-actions"] }));
 
   registerTool("civ1_create_mission", "Create a local in-memory mission. This does not authorize external actions.",
     { goal: shortText, constraints: z.array(z.string().trim().min(1).max(1000)).max(50).default([]) },

@@ -2,14 +2,15 @@
 
 ## Prototype guarantees
 - Input shape validation through Zod.
-- No shell execution, arbitrary file access, outbound network calls, or external actions.
+- No shell execution, outbound network calls, or external actions.
+- Tool calls append actor, tool, argument hash and result class to a local JSONL audit file (default `.data/mcp-audit.jsonl`). Raw arguments and results are not written.
 - No secrets required.
 - Gate results are caller-supplied records, not self-verifying evidence.
 - Mission data remains local to the process.
 
 ## Not provided
 - Authentication or authorization.
-- Durable or tamper-evident audit.
+- Tamper-evident or multi-process-safe audit. The local JSONL log is durable on disk for a single process; sequence numbers restart on process start, and MCP-001 already states this is not a production audit store.
 - Source authenticity verification.
 - Rate limiting or quotas.
 - Network transport hardening.
