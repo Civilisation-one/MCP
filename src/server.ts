@@ -8,8 +8,10 @@ import type { DraftPrAuthorizer, DraftPrExecutor, DraftPrRequest } from "./draft
 const missionId = z.string().regex(/^CIV1-M-\d{5}$/, "Expected mission ID like CIV1-M-00001");
 const shortText = z.string().trim().min(1).max(4000);
 const result = (data: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] });
-const noSecretLike = (value: string) =>
-  !/(gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{15,}|-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----|\bBearer\\s+|\b(password|token|secret)\\s*[:=])/i.test(value);
+/** Returns false when the value looks like a credential. Exported for unit tests. */
+export function noSecretLike(value: string): boolean {
+  return !/(gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{15,}|-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----|\bBearer\s+|\b(password|token|secret)\s*[:=])/i.test(value);
+}
 
 export interface Civ1McpServerOptions {
   audit?: AppendOnlyAudit;
@@ -62,9 +64,10 @@ export function createCiv1McpServer(domain = new Civ1Domain(), options: Civ1McpS
 
   registerTool("civ1_system_status", "Return capabilities and limitations; no deployment or production-readiness claim.", {}, async () =>
     result({ name: "Civilisation.One MCP", version: "0.1.0", status: "PROTOTYPE", transport: "stdio",
-      persistence: "in-memory", capabilities: ["missions", "evidence-records", "objection-ledger", "gate-status-records", "audit-events",
-        "external-source-import"],
-      limitations: ["no-authentication", "no-durable-storage", "no-source-verification", "no-external-actions"] }));
+      persistence: "in-memory-missions, local-jsonl-audit",
+      capabilities: ["missions", "evidence-records", "objection-ledger", "gate-status-records", "audit-events",
+        "external-source-import", "local-jsonl-audit", "bridge-temporal-state-validation", "fail-closed-draft-pr"],
+      limitations: ["no-authentication", "audit-not-tamper-evident-or-multi-process-safe", "no-source-verification", "no-external-actions"] }));
 
   registerTool("civ1_create_mission", "Create a local in-memory mission. This does not authorize external actions.",
     { goal: shortText, constraints: z.array(z.string().trim().min(1).max(1000)).max(50).default([]) },

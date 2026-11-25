@@ -13,17 +13,20 @@ A minimal, local-first Model Context Protocol (MCP) server for Civilisation.One 
 - `civ1_set_gate_status` — record a declared gate result; it does not prove the gate passed.
 - `civ1_import_external_source` — one-way import of an outside source's claims (see below).
 - `civ1_close_mission` — close a mission to further record additions.
+- `civ1_bridge_validate_temporal_state` — structural validation of a proposed NuN temporal-state envelope; not authentication or model verification.
+- `civ1_open_draft_pr` — fail-closed draft PR capability for Civilisation-one/MCP; denied unless a trusted host injects an authenticated actor and authorizer.
 
-All data is in memory and disappears when the process exits. No external API calls, repository writes, memory commits, publishing, or consequential actions are performed.
+Mission state is in memory and disappears when the process exits. Tool calls are also appended to a local JSONL audit file (default `.data/mcp-audit.jsonl`) with argument hashes and result classes, not raw arguments or results. That file is durable local logging, not a tamper-evident or multi-process-safe production audit store. No external API calls, repository writes, memory commits, publishing, or consequential actions are performed.
 
 ## Requirements and commands
-Node.js 20+ and npm.
+Node.js 20+ and npm. The `civ-intelligence-layer` Git submodule must be initialised; it is pinned in `.gitmodules` and is required for the canonical contract types.
 
 ```bash
-npm install
+git submodule update --init
+npm ci                # requires package-lock.json; use npm install only if you need to regenerate it
 npm run build
 npm test
-npm run smoke   # starts dist/index.js over stdio, as a client would, and calls the tools
+npm run smoke   # starts dist/src/index.js over stdio, as a client would, and calls the tools
 npm start
 ```
 
@@ -37,7 +40,7 @@ Use an absolute path appropriate to your machine:
   "mcpServers": {
     "civilisation-one": {
       "command": "node",
-      "args": ["/absolute/path/to/MCP/dist/index.js"]
+      "args": ["/absolute/path/to/MCP/dist/src/index.js"]
     }
   }
 }
@@ -70,7 +73,7 @@ Gate statuses: `PASS`, `FAIL`, `BLOCKED`, `INCONCLUSIVE`.
 
 ## Security limitations
 - No authentication or authorization.
-- No durable or tamper-evident audit.
+- Local append-only JSONL audit exists (default `.data/mcp-audit.jsonl`); it is not tamper-evident or safe for concurrent processes, and sequence numbers restart with the process.
 - No source authenticity verification.
 - No rate limits or multi-user isolation.
 - Do not expose this as a network service without security hardening.
