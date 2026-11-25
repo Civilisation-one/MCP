@@ -76,7 +76,7 @@ export function createCiv1McpServer(domain = new Civ1Domain(), options: Civ1McpS
         "external-source-import", "local-jsonl-audit", "bridge-temporal-state-validation", "fail-closed-draft-pr",
         ...(publicData.enabled ? ["public-data-read", "science-data-read"] : [])],
       publicData: { enabled: publicData.enabled, endpoints: publicData.endpoints.map((e) => ({ host: e.host, pathPrefix: e.pathPrefix, label: e.label, hourlyLimit: e.hourlyLimit })) },
-      limitations: ["no-authentication", "audit-not-tamper-evident-or-multi-process-safe", "no-source-verification",
+      limitations: ["no-authentication", "audit-single-writer-truncation-needs-external-checkpoint", "no-source-verification",
         publicData.enabled ? "external-actions-limited-to-read-only-allowlisted-get" : "no-external-actions"] }));
 
   registerTool("civ1_create_mission", "Create a local in-memory mission. This does not authorize external actions.",

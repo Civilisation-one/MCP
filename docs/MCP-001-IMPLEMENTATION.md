@@ -8,7 +8,7 @@ The `civ-intelligence-layer` submodule is pinned to commit `7de79ea01a75dd2b41f3
 ## Audit
 Each MCP tool call is appended to a local JSONL audit file. Entries contain transport-derived actor identity (or the explicit unauthenticated marker), tool name, SHA-256 argument hash and result class. Raw arguments, results and secrets are not written. The log is opened in append-only mode with restrictive file permissions. An unavailable audit file blocks tool execution.
 
-This is durable local logging, not a claim of tamper-proof or multi-process-safe production audit. The current stdio transport has no authenticated principal; the actor is therefore recorded as unauthenticated unless a trusted host integration injects an authenticated transport actor.
+Records are hash-chained and the chain is verified on start (fail closed); sequence numbers resume across restarts. This is tamper-evident local logging, not a tamper-proof or multi-process-safe production audit: truncation is detected only against an externally stored checkpoint. The current stdio transport has no authenticated principal; the actor is therefore recorded as unauthenticated unless a trusted host integration injects an authenticated transport actor.
 
 ## Draft PR capability
 `civ1_open_draft_pr` is registered with a fixed repository and base-branch scope. It accepts no token or credential fields. It has no merge, auto-merge, ready-for-review, publish, release or deployment operation. It requires both a transport-authenticated actor and an independently injected authorizer/executor. Because this repository currently has no authenticated transport, the default configuration fails closed and cannot open a PR. This is intentional; no model or tool argument can mint approval.

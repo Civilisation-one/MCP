@@ -1,6 +1,8 @@
-import { createHash, type KeyLike } from "node:crypto";
+import { type KeyLike } from "node:crypto";
 import {
   bridgeMessageSchema,
+  canonicalJson,
+  sha256,
   SequenceGuard,
   verifyBridgeMessage,
   type BridgeMessage,
@@ -89,7 +91,7 @@ export class MemoryAuditLedger {
       details: structuredClone(details),
       previousHash,
     };
-    const hash = createHash("sha256").update(JSON.stringify(body)).digest("hex");
+    const hash = sha256(canonicalJson(body));
     const event = Object.freeze({ ...body, hash });
     this.entries.push(event);
     return structuredClone(event);
