@@ -4,6 +4,10 @@ import { Civ1Domain, EVIDENCE_STATUSES, GATE_STATUSES } from "./domain.js";
 import { validateNuNTemporalState } from "./bridge/state-validator.js";
 import { AppendOnlyAudit, type TransportActor } from "./audit.js";
 import type { DraftPrAuthorizer, DraftPrExecutor, DraftPrRequest } from "./draft-pr.js";
+import { PublicDataError, PublicDataFetcher } from "./public-data/fetcher.js";
+import { SourceParseError } from "./public-data/sources.js";
+import { fetchPublicData } from "./public-data/service.js";
+import { fetchScienceData } from "./public-data/science-service.js";
 
 const missionId = z.string().regex(/^CIV1-M-\d{5}$/, "Expected mission ID like CIV1-M-00001");
 const shortText = z.string().trim().min(1).max(4000);
@@ -19,10 +23,13 @@ export interface Civ1McpServerOptions {
   resolveTransportActor?: (extra: unknown) => TransportActor | null;
   authorizeDraftPr?: DraftPrAuthorizer;
   executeDraftPr?: DraftPrExecutor;
+  /** Read-only public data fetcher. Off unless CIV1_PUBLIC_DATA_ENABLED=1 (or a fetcher with enabled: true is passed). */
+  publicData?: PublicDataFetcher;
 }
 export function createCiv1McpServer(domain = new Civ1Domain(), options: Civ1McpServerOptions = {}) {
   const server = new McpServer({ name: "civilisation-one-mcp", version: "0.1.0" });
   const audit = options.audit ?? new AppendOnlyAudit();
+  const publicData = options.publicData ?? new PublicDataFetcher();
   const registerTool = (name: string, description: string, schema: any, handler: (args: any, extra?: any) => Promise<any>) => {
     (server as any).tool(name, description, schema, async (args: any, extra: any) => {
       // Preflight before any handler can mutate state or perform an external action.
@@ -66,8 +73,11 @@ export function createCiv1McpServer(domain = new Civ1Domain(), options: Civ1McpS
     result({ name: "Civilisation.One MCP", version: "0.1.0", status: "PROTOTYPE", transport: "stdio",
       persistence: "in-memory-missions, local-jsonl-audit",
       capabilities: ["missions", "evidence-records", "objection-ledger", "gate-status-records", "audit-events",
-        "external-source-import", "local-jsonl-audit", "bridge-temporal-state-validation", "fail-closed-draft-pr"],
-      limitations: ["no-authentication", "audit-not-tamper-evident-or-multi-process-safe", "no-source-verification", "no-external-actions"] }));
+        "external-source-import", "local-jsonl-audit", "bridge-temporal-state-validation", "fail-closed-draft-pr",
+        ...(publicData.enabled ? ["public-data-read", "science-data-read"] : [])],
+      publicData: { enabled: publicData.enabled, endpoints: publicData.endpoints.map((e) => ({ host: e.host, pathPrefix: e.pathPrefix, label: e.label, hourlyLimit: e.hourlyLimit })) },
+      limitations: ["no-authentication", "audit-not-tamper-evident-or-multi-process-safe", "no-source-verification",
+        publicData.enabled ? "external-actions-limited-to-read-only-allowlisted-get" : "no-external-actions"] }));
 
   registerTool("civ1_create_mission", "Create a local in-memory mission. This does not authorize external actions.",
     { goal: shortText, constraints: z.array(z.string().trim().min(1).max(1000)).max(50).default([]) },
@@ -114,6 +124,61 @@ export function createCiv1McpServer(domain = new Civ1Domain(), options: Civ1McpS
     async ({ missionId: id, ...input }) => {
       try { return result(domain.importExternalSource(id, input)); }
       catch (error) { return result({ error: "EXTERNAL_IMPORT_FAILED", message: error instanceof Error ? error.message : String(error) }); }
+    });
+
+  const code = (re: RegExp, max = 120) => z.string().trim().min(1).max(max).regex(re);
+  registerTool("civ1_fetch_public_data",
+    "Read-only fetch from a public data API (World Bank Indicators, OECD SDMX, Eurostat JSON-stat, UN SDG, or an " +
+    "operator-allowlisted JSON endpoint) into a mission as ONE evidence item pinned by URL, time and SHA-256. Values " +
+    "are source-reported and UNVERIFIED, capped at HYPOTHESIS. GET only, allowlisted hosts only, no redirects, no " +
+    "credentials sent. Off unless the host sets CIV1_PUBLIC_DATA_ENABLED=1.",
+    { missionId,
+      source: z.enum(["worldbank", "oecd", "eurostat", "unsdg", "allowlisted_json"]),
+      worldbank: z.object({ country: code(/^[A-Za-z0-9;]+$/, 80), indicator: code(/^[A-Za-z0-9_.]+$/, 80),
+        startYear: z.number().int().min(1900).max(2200).optional(), endYear: z.number().int().min(1900).max(2200).optional() }).optional(),
+      oecd: z.object({ agency: code(/^[A-Z0-9_.]+$/, 60), dataflow: code(/^[A-Za-z0-9_@,.]+$/, 90),
+        key: z.string().trim().max(300).regex(/^[A-Za-z0-9_.+]*$/).optional(),
+        startPeriod: z.string().max(10).optional(), endPeriod: z.string().max(10).optional() }).optional(),
+      eurostat: z.object({ dataset: code(/^[A-Za-z0-9_$]+$/, 60),
+        filters: z.record(z.string().max(40), z.array(z.string().max(40)).max(50)).optional(),
+        lastTimePeriod: z.number().int().min(1).max(100).optional() }).optional(),
+      unsdg: z.object({ seriesCode: code(/^[A-Z0-9_]+$/, 40), areaCodes: z.array(z.string().regex(/^[0-9]{1,3}$/)).min(1).max(50),
+        timePeriods: z.array(z.number().int().min(1900).max(2200)).max(100).optional() }).optional(),
+      url: z.string().url().max(2000).optional(),
+      limit: z.number().int().min(0).max(1000).default(200) },
+    async (args, extra) => {
+      try { return result(await fetchPublicData(domain, publicData, args, extra?.signal)); }
+      catch (error) {
+        if (error instanceof PublicDataError || error instanceof SourceParseError) return result({ error: error.code, message: error.message });
+        return result({ error: "PUBLIC_DATA_FAILED", message: error instanceof Error ? error.message : String(error) });
+      }
+    });
+
+  registerTool("civ1_fetch_science_data",
+    "Read-only query of a scientific archive into a mission as ONE evidence item pinned by URL, time and SHA-256: " +
+    "CERN Open Data and Zenodo records (files listed with checksums, never downloaded), HEPData tables with " +
+    "uncertainties, INSPIRE-HEP literature, or an ADQL SELECT over TAP (NOIRLab Data Lab for DESI, IRSA for " +
+    "Planck catalogues, ESA Gaia). Results are published by the archive, UNVERIFIED and capped at HYPOTHESIS. " +
+    "Off unless the host sets CIV1_PUBLIC_DATA_ENABLED=1.",
+    { missionId,
+      source: z.enum(["cern_opendata", "hepdata", "inspire", "zenodo", "tap"]),
+      cern_opendata: z.object({ recid: z.number().int().positive().optional(), search: z.string().trim().max(300).optional(),
+        size: z.number().int().min(1).max(50).optional() }).optional(),
+      hepdata: z.object({ inspireId: z.number().int().positive(), table: z.string().trim().max(120).optional(),
+        version: z.number().int().min(1).max(100).optional() }).optional(),
+      inspire: z.object({ search: z.string().trim().min(1).max(500), size: z.number().int().min(1).max(100).optional(),
+        sort: z.enum(["mostrecent", "mostcited"]).optional() }).optional(),
+      zenodo: z.object({ recordId: z.number().int().positive().optional(), search: z.string().trim().max(300).optional(),
+        size: z.number().int().min(1).max(50).optional() }).optional(),
+      tap: z.object({ service: z.enum(["datalab_desi", "irsa_planck", "gaia"]), query: z.string().trim().min(1).max(4000),
+        maxRows: z.number().int().min(1).max(5000).optional() }).optional(),
+      limit: z.number().int().min(0).max(5000).default(200) },
+    async (args, extra) => {
+      try { return result(await fetchScienceData(domain, publicData, args, extra?.signal)); }
+      catch (error) {
+        if (error instanceof PublicDataError || error instanceof SourceParseError) return result({ error: error.code, message: error.message });
+        return result({ error: "SCIENCE_DATA_FAILED", message: error instanceof Error ? error.message : String(error) });
+      }
     });
 
   registerTool("civ1_close_mission", "Close a mission to further record additions. Internal state change only.",

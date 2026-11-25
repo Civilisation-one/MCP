@@ -30,6 +30,16 @@ export interface ExternalImportResult {
   objections: string[];
 }
 
+export interface PublicDataEvidenceInput {
+  source: string; sourceLabel: string; dataset: string; title?: string; url: string; retrievedAt: string;
+  sha256: string; bytes: number; observationCount: number; areaCount: number; periods: string[]; truncated: boolean;
+}
+
+export interface ScienceDataEvidenceInput {
+  source: string; sourceLabel: string; dataset: string; kind: "records" | "table" | "measurements" | "raw";
+  count: number; truncated: boolean; url: string; retrievedAt: string; sha256: string; bytes: number; dois: string[];
+}
+
 /** External material can be at most HYPOTHESIS here (and only with a named test). Raising it to SUPPORTED
  *  or ESTABLISHED needs evidence checked inside Civilisation.One, recorded separately. */
 export const EXTERNAL_MAX_STATUS: EvidenceStatus = "HYPOTHESIS";
@@ -143,6 +153,55 @@ export class Civ1Domain {
       downgraded: imported.filter((i) => i.downgraded).length, objections: objections.length,
     });
     return { missionId, source: input.source, snapshot: input.snapshot, imported, objections };
+  }
+
+  /** Records one public-data fetch as a single evidence item. The data are source-reported: Civilisation.One
+   *  did not observe them, so the status is capped like any outside source (HYPOTHESIS, with the test named).
+   *  The retrieval itself is pinned by URL, time and SHA-256 of the response body, so anyone can re-fetch and
+   *  compare; that proves what the source said, not that it is true. */
+  recordPublicData(missionId: string, input: PublicDataEvidenceInput): EvidenceRecord {
+    const mission = this.requireOpenMission(missionId);
+    const periods = input.periods.length ? `${input.periods[0]}–${input.periods[input.periods.length - 1]}` : "no periods";
+    const description = [
+      `Public data from ${input.sourceLabel}${input.title ? ` — ${input.title}` : ""} (${input.dataset}):`,
+      `${input.observationCount} observations, ${input.areaCount} areas, ${periods}${input.truncated ? ", truncated by the source's paging or the local cap" : ""}.`,
+      `Source-reported, not observed or verified by Civilisation.One; the series may mix measured values, estimates and projections (see each observation's flag).`,
+      `Retrieved ${input.retrievedAt}, ${input.bytes} bytes, sha256 ${input.sha256}.`,
+      `Test that would settle it: re-fetch the URL and compare the hash, then check against an independent source.`,
+    ].join(" ");
+    const record = this.recordEvidence(missionId, {
+      reference: `public-data:${input.source}:${input.dataset}@${input.retrievedAt}#sha256=${input.sha256}`,
+      description, status: EXTERNAL_MAX_STATUS, sourceUri: input.url,
+    });
+    this.appendAudit(mission, "PUBLIC_DATA_RECORDED", {
+      evidenceId: record.id, source: input.source, dataset: input.dataset, url: input.url, sha256: input.sha256,
+      observations: input.observationCount, truncated: input.truncated,
+    });
+    return record;
+  }
+
+  /** Records one scientific-archive fetch (catalogue records, a TAP table or a HEPData table) as a single
+   *  evidence item, capped like any outside source and pinned by URL, time and SHA-256. */
+  recordScienceData(missionId: string, input: ScienceDataEvidenceInput): EvidenceRecord {
+    const mission = this.requireOpenMission(missionId);
+    const what = { records: "catalogue records", table: "table rows", measurements: "data points", raw: "unparsed response" }[input.kind];
+    const description = [
+      `Scientific archive data from ${input.sourceLabel} (${input.dataset}):`,
+      input.kind === "raw" ? "an unparsed response." : `${input.count} ${what}${input.truncated ? ", truncated" : ""}.`,
+      input.dois.length ? `DOIs: ${input.dois.join(", ")}.` : "",
+      "Published by the archive or collaboration; not observed or verified by Civilisation.One.",
+      `Retrieved ${input.retrievedAt}, ${input.bytes} bytes, sha256 ${input.sha256}.`,
+      "Test that would settle it: re-run the query and compare the hash, then check against an independent measurement.",
+    ].filter(Boolean).join(" ");
+    const record = this.recordEvidence(missionId, {
+      reference: `science-data:${input.source}:${input.dataset}@${input.retrievedAt}#sha256=${input.sha256}`.slice(0, 500),
+      description, status: EXTERNAL_MAX_STATUS, sourceUri: input.url.slice(0, 2000),
+    });
+    this.appendAudit(mission, "SCIENCE_DATA_RECORDED", {
+      evidenceId: record.id, source: input.source, dataset: input.dataset, url: input.url, sha256: input.sha256,
+      kind: input.kind, count: input.count, truncated: input.truncated,
+    });
+    return record;
   }
 
   closeMission(missionId: string): Mission {
