@@ -12,11 +12,13 @@ A minimal, local-first Model Context Protocol (MCP) server for Civilisation.One 
 - `civ1_record_objection` — preserve criticism and unresolved disagreement.
 - `civ1_set_gate_status` — record a declared gate result; it does not prove the gate passed.
 - `civ1_import_external_source` — one-way import of an outside source's claims (see below).
+- `civ1_fetch_public_data` — read-only fetch from a public data API into a mission (off by default; see below).
+- `civ1_fetch_science_data` — read-only query of a scientific archive (CERN, HEPData, INSPIRE, Zenodo, TAP for DESI / Planck / Gaia) into a mission (off by default).
 - `civ1_close_mission` — close a mission to further record additions.
 - `civ1_bridge_validate_temporal_state` — structural validation of a proposed NuN temporal-state envelope; not authentication or model verification.
 - `civ1_open_draft_pr` — fail-closed draft PR capability for Civilisation-one/MCP; denied unless a trusted host injects an authenticated actor and authorizer.
 
-Mission state is in memory and disappears when the process exits. Tool calls are also appended to a local JSONL audit file (default `.data/mcp-audit.jsonl`) with argument hashes and result classes, not raw arguments or results. That file is durable local logging, not a tamper-evident or multi-process-safe production audit store. No external API calls, repository writes, memory commits, publishing, or consequential actions are performed.
+Mission state is in memory and disappears when the process exits. Tool calls are also appended to a local JSONL audit file (default `.data/mcp-audit.jsonl`) with argument hashes and result classes, not raw arguments or results. That file is durable local logging, not a tamper-evident or multi-process-safe production audit store. The only external calls are the opt-in, read-only public and scientific data fetches described below. No repository writes, memory commits, publishing, or consequential actions are performed.
 
 ## Requirements and commands
 Node.js 20+ and npm. The `civ-intelligence-layer` Git submodule must be initialised; it is pinned in `.gitmodules` and is required for the canonical contract types.
@@ -58,6 +60,49 @@ Use an absolute path appropriate to your machine:
 [`examples/nun-core-96a7dcf.json`](examples/nun-core-96a7dcf.json) is a snapshot of the NuN claims in `github.com/bis3946/core` at commit `96a7dcf`, ready to pass as the tool's arguments (with a `missionId`). A review of that repository on 30 Oct 2026 found that `quantum_priority_hash.txt` does match `nun_quantum_proof.lean`, that the Lean theorem's conclusion is `True` (so it holds whatever the assumptions), that room temperature and the VFE bound are assumed rather than derived, and that the repository has no Lean toolchain or build configuration. Record those as evidence or objections against the imported claims.
 
 There is no live connection to NuN or any other outside system. Before one is considered, this server needs the authentication, per-tool authorisation and durable audit listed under Security limitations.
+
+## Public data access
+
+`civ1_fetch_public_data` pulls statistics from public APIs into a mission. It is **off unless the host sets `CIV1_PUBLIC_DATA_ENABLED=1`**.
+
+| `source` | API | Query |
+|---|---|---|
+| `worldbank` | World Bank Indicators API v2 (`api.worldbank.org/v2/`) | `country` (ISO2/ISO3, `;`-separated, or `all`), `indicator` (e.g. `SP.POP.TOTL`), optional `startYear`/`endYear` |
+| `oecd` | OECD Data Explorer SDMX (`sdmx.oecd.org/public/rest/data/`) | `agency`, `dataflow`, optional `key`, `startPeriod`, `endPeriod` |
+| `eurostat` | Eurostat Statistics API, JSON-stat 2.0 (`ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/`) | `dataset`, optional `filters` ({dimension: [codes]}), `lastTimePeriod` |
+| `unsdg` | UN SDG API (`unstats.un.org/SDGAPI/v1/sdg/`) | `seriesCode`, `areaCodes` (M49), optional `timePeriods` |
+| `allowlisted_json` | Any endpoint in `CIV1_PUBLIC_DATA_ALLOWLIST` | `url`; the body is returned unparsed |
+
+What a fetch produces:
+
+- **One evidence item per fetch**, capped at **HYPOTHESIS** like any outside source, with the URL, retrieval time and the SHA-256 of the exact response bytes in its reference. Re-fetching and comparing the hash shows what the source said at that time; it does not show the data are true.
+- **Observations** in one shape (`area`, `period`, `value`, `unit`, `flag`, `dims`). The source's status flag (estimate, provisional, projection…) is kept. Values that are not plain numbers (`">95"`, `NaN`) come back as `value: null` with `raw` kept; they are never coerced.
+- `trust: "UNVERIFIED"` and `dataClass: "source_reported"`. Civilisation.One did not observe these values. Do not feed them to CivScore or treat them as observed data without independent verification (C1-DAP-001 / IEV-001).
+
+Boundary (all fail closed): HTTPS on port 443 only; exact host plus path prefix on the allowlist (no subdomains); GET only, with no cookies or credentials and only `Accept` and `User-Agent` headers; redirects refused; 5 MB and 15 s caps; JSON only; URLs that look like they carry a key or token refused; a per-host hourly budget (50 for OECD, whose API allows 60 downloads an hour, otherwise 120). `CIV1_PUBLIC_DATA_ALLOWLIST` takes comma-separated `host/path/prefix/` entries; IP literals, `localhost`, `.local` and `.internal` names are rejected. Every call is audited like any other tool call (arguments hashed, never stored).
+
+The response parsers were written against each API's documented format and tested with fixtures; run a live fetch against each source before relying on them.
+
+## Scientific archives
+
+`civ1_fetch_science_data` uses the same switch, fetcher and boundary as public data.
+
+| `source` | Archive | What you get |
+|---|---|---|
+| `cern_opendata` | CERN Open Data portal (`opendata.cern.ch/api/records`) | Records by `recid` or `search`: title, DOI, experiment, and the file list with sizes and checksums |
+| `hepdata` | HEPData (`www.hepdata.net/record/ins<id>`) | With `table`: data points with bins, qualifiers and stat/sys uncertainties. Without: the record (title, DOI, collaboration) |
+| `inspire` | INSPIRE-HEP (`inspirehep.net/api/literature`) | Literature search: titles, arXiv ids, DOIs, citation counts, authors |
+| `zenodo` | Zenodo (`zenodo.org/api/records`) | Records by id or search, with file checksums |
+| `tap` / `datalab_desi` | NOIRLab Astro Data Lab TAP | ADQL over DESI catalogues (e.g. `desi_dr1.zpix`) |
+| `tap` / `irsa_planck` | NASA/IPAC IRSA TAP | ADQL over Planck catalogues (e.g. `com_pccs2_100`) |
+| `tap` / `gaia` | ESA Gaia Archive TAP | ADQL over Gaia (e.g. `gaiadr3.gaia_source`) |
+
+- **Bulk files are never downloaded.** CERN datasets, Planck maps and DESI spectra are FITS or ROOT files from megabytes to terabytes. The tool lists them with size, checksum and location so they can be fetched in an analysis environment and checked against the checksum.
+- **TAP queries** must be a single `SELECT`. Statements that write, `INTO`, `WITH`, comments, `;` and table uploads are refused before any request. Results come back as CSV, capped with `MAXREC` (default 1000, at most 5000); a full result needs an asynchronous TAP job, which this tool does not run. 64-bit IDs (DESI `TARGETID`, Gaia `source_id`) stay exact as text.
+- **Unrecognised responses are returned raw**, labelled as such, rather than guessed at.
+- Each query is one evidence item, capped at **HYPOTHESIS**, with the archive's DOIs, the URL, the retrieval time and the SHA-256 of the response. Published values carry the collaboration's own systematics; check them against an independent result before relying on them.
+
+Not covered yet: the ESA Planck Legacy Archive's own interface (Planck maps and chains are files; the catalogues are available through IRSA), SPARCL spectra (its API takes POST requests and this fetcher is GET-only), arXiv (it returns Atom XML), and NASA ADS (needs an API token).
 
 ## Design invariants
 1. Model output is not verified evidence.
