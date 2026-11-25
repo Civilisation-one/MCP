@@ -17,13 +17,27 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
+      - name: Fetch private submodule
+        # Read-only deploy key on Civilisation-one/civ-intelligence-layer,
+        # stored by the org maintainer as the MCP repo secret CIV_INTEL_DEPLOY_KEY.
+        # The key is held only in an ssh-agent for this step and never written to disk.
+        env:
+          CIV_KEY: ${{ secrets.CIV_INTEL_DEPLOY_KEY }}
+        run: |
+          eval "$(ssh-agent -s)"
+          printf '%s\n' "$CIV_KEY" | ssh-add -
+          git config --global url."git@github.com:Civilisation-one/civ-intelligence-layer".insteadOf "https://github.com/Civilisation-one/civ-intelligence-layer"
+          GIT_SSH_COMMAND="ssh -o IdentitiesOnly=no -o StrictHostKeyChecking=accept-new" git submodule update --init --recursive
+          git config --global --unset url."git@github.com:Civilisation-one/civ-intelligence-layer".insteadOf
+          ssh-agent -k
+          git submodule status --recursive
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
       - name: Install dependencies
-        run: npm install --ignore-scripts --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Type-check
         run: npm run typecheck
       - name: Build
