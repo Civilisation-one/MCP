@@ -18,7 +18,7 @@ A minimal, local-first Model Context Protocol (MCP) server for Civilisation.One 
 - `civ1_bridge_validate_temporal_state` — structural validation of a proposed NuN temporal-state envelope; not authentication or model verification.
 - `civ1_open_draft_pr` — fail-closed draft PR capability for Civilisation-one/MCP; denied unless a trusted host injects an authenticated actor and authorizer.
 
-Mission state is in memory and disappears when the process exits. Tool calls are also appended to a local JSONL audit file (default `.data/mcp-audit.jsonl`) with argument hashes and result classes, not raw arguments or results. That file is durable local logging, not a tamper-evident or multi-process-safe production audit store. The only external calls are the opt-in, read-only public and scientific data fetches described below. No repository writes, memory commits, publishing, or consequential actions are performed.
+Mission state is in memory and disappears when the process exits. Tool calls are also appended to a local JSONL audit file (default `.data/mcp-audit.jsonl`) with argument hashes and result classes, not raw arguments or results. Each record is hash-chained (SHA-256 over canonical JSON, linked to the previous record); on start the server verifies the log, refuses one that fails, and resumes the sequence. It is tamper-evident, not tamper-proof: whoever controls the file can rewrite it wholesale, and truncation is only caught against a `checkpoint()` stored somewhere else. It is single-writer: not safe for several processes. The only external calls are the opt-in, read-only public and scientific data fetches described below. No repository writes, memory commits, publishing, or consequential actions are performed.
 
 ## Requirements and commands
 Node.js 20+ and npm. The `civ-intelligence-layer` Git submodule must be initialised; it is pinned in `.gitmodules` and is required for the canonical contract types.
@@ -118,7 +118,7 @@ Gate statuses: `PASS`, `FAIL`, `BLOCKED`, `INCONCLUSIVE`.
 
 ## Security limitations
 - No authentication or authorization.
-- Local append-only JSONL audit exists (default `.data/mcp-audit.jsonl`); it is not tamper-evident or safe for concurrent processes, and sequence numbers restart with the process.
+- Local append-only JSONL audit (default `.data/mcp-audit.jsonl`) is hash-chained and verified on start, and sequence numbers resume across restarts. It is single-writer, and detecting truncation needs a checkpoint kept outside the log. Records written before chaining are accepted only before the first chained record.
 - No source authenticity verification.
 - No rate limits or multi-user isolation.
 - Do not expose this as a network service without security hardening.
